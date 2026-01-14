@@ -2,8 +2,10 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Room-based Multiplayer Demo</title>
+  <title>Room Multiplayer Demo</title>
   <link rel="stylesheet" href="style.css" />
+  <meta http-equiv="Content-Security-Policy"
+      content="connect-src 'self' wss://gamebackend-dk2p.onrender.com data: blob:;">
 </head>
 <body>
   <div id="app">
@@ -13,10 +15,6 @@
     </header>
 
     <section id="connection-panel">
-      <label>
-        Server URL:
-        <input id="server-url" type="text" value="ws://localhost:8080" />
-      </label>
       <button id="connect-btn">Connect</button>
     </section>
 
@@ -46,7 +44,7 @@
 
       <canvas id="game-canvas" width="600" height="400"></canvas>
       <p class="hint">
-        Use WASD or arrow keys to move your square. Positions sync between players in the same room.
+        Use WASD or arrow keys to move your square.
       </p>
     </section>
   </div>

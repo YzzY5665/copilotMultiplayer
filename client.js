@@ -116,11 +116,13 @@ function handleMessage(raw) {
 
     case "room_joined":
       roomId = data.roomId;
-      isHost = false;
+      isHost = (data.ownerId === playerId);
       roomIdLabel.textContent = `Room: ${roomId}`;
-      hostLabel.textContent = "(You are player)";
+      hostLabel.textContent = isHost ? "(You are host)" : "(You are player)";
       showRoom();
       initLocalPlayer();
+
+      if (isHost) broadcastPlayerList();
       break;
 
     case "room_list":
@@ -128,16 +130,20 @@ function handleMessage(raw) {
       break;
 
     case "relay":
-      handleRelayPayload(data.from, data.payload);
+      handleRelay(data);
       break;
 
-    case "remove_player":
-      players.delete(data.removed_player_id);
+    case "player_left":
+      if (isHost) {
+        players.delete(data.playerId);
+        broadcastPlayerList();
+      }
       break;
 
     case "make_host":
       isHost = true;
       hostLabel.textContent = "(You are host)";
+      broadcastPlayerList();
       break;
 
     case "error":
@@ -146,9 +152,57 @@ function handleMessage(raw) {
   }
 }
 
+// --- Host sends updated player list ---
+function broadcastPlayerList() {
+  sendJSON({
+    type: "relay",
+    payload: {
+      kind: "player_list",
+      players: Array.from(players.keys())
+    }
+  });
+}
+
+// --- Handle relay payloads ---
+function handleRelay(data) {
+  const payload = data.payload;
+
+  if (payload.kind === "player_list") {
+    const list = payload.players;
+
+    list.forEach(id => {
+      if (!players.has(id)) {
+        players.set(id, {
+          x: canvas.width / 2,
+          y: canvas.height / 2,
+          color: randomColor()
+        });
+      }
+    });
+
+    for (const id of players.keys()) {
+      if (!list.includes(id)) {
+        players.delete(id);
+      }
+    }
+  }
+
+  if (payload.kind === "state") {
+    handleRelayPayload(data.from, payload);
+  }
+}
+
 // --- Lobby actions ---
 createRoomBtn.addEventListener("click", () => {
-  sendJSON({ type: "create_room" });
+  const isPrivate = document.getElementById("private-room-toggle").checked;
+
+  const tags = ["bulletgame"];
+  if (isPrivate) tags.push("private");
+
+  sendJSON({
+    type: "create_room",
+    tags
+  });
 });
 
 joinRoomBtn.addEventListener("click", () => {
@@ -203,7 +257,6 @@ function randomColor() {
 }
 
 function handleRelayPayload(fromId, payload) {
-  if (!payload || payload.kind !== "state") return;
   if (fromId === playerId) return;
 
   let p = players.get(fromId);

@@ -2,26 +2,38 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <title>Room Multiplayer Demo</title>
+  <title>BulletGame Multiplayer</title>
   <link rel="stylesheet" href="style.css" />
-  <meta http-equiv="Content-Security-Policy"
-      content="connect-src 'self' wss://gamebackend-dk2p.onrender.com data: blob:;">
 </head>
 <body>
   <div id="app">
     <header>
-      <h1>Room Multiplayer Demo</h1>
+      <h1>BulletGame Multiplayer</h1>
       <div id="connection-status">Disconnected</div>
     </header>
 
+    <!-- Connection -->
     <section id="connection-panel">
       <button id="connect-btn">Connect</button>
     </section>
 
+    <!-- Lobby -->
     <section id="lobby" class="hidden">
       <h2>Lobby</h2>
+
       <div class="row">
         <button id="create-room-btn">Create Room</button>
+      </div>
+
+      <!-- PRIVATE LOBBY TOGGLE -->
+      <div class="row">
+        <label style="display:flex;align-items:center;gap:6px;">
+          <input type="checkbox" id="private-room-toggle" />
+          Private Lobby
+        </label>
+      </div>
+
+      <div class="row">
         <input id="join-room-id" type="text" placeholder="Room ID" />
         <button id="join-room-btn">Join Room</button>
       </div>
@@ -33,6 +45,7 @@
       <div id="room-list"></div>
     </section>
 
+    <!-- Room -->
     <section id="room" class="hidden">
       <h2>Room</h2>
       <div id="room-info">
@@ -40,12 +53,11 @@
         <span id="player-id-label"></span>
         <span id="host-label"></span>
       </div>
+
       <button id="leave-room-btn">Leave Room</button>
 
       <canvas id="game-canvas" width="600" height="400"></canvas>
-      <p class="hint">
-        Use WASD or arrow keys to move your square.
-      </p>
+      <p class="hint">Use WASD or Arrow Keys to move.</p>
     </section>
   </div>
 

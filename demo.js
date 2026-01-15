@@ -4,91 +4,119 @@ function wait(ms) {
     return new Promise(res => setTimeout(res, ms));
 }
 
-// Number of fake clients to spawn
-const CLIENT_COUNT = 4;
+const SERVER_URL = "wss://gamebackend-dk2p.onrender.com";
+const CLIENT_COUNT = 100;
 const clients = [];
 
-// Replace with your actual WebSocket URL
-const SERVER_URL = "wss://gamebackend-dk2p.onrender.com";
+let assignedCount = 0;
+let joinCount = 0;
+let relayReceived = 0;
+let binaryReceived = 0;
+
+// Timing buckets
+const timings = {
+    connect: [],
+    assignedId: [],
+    joinRoom: [],
+    relay: [],
+    binary: []
+};
 
 // Create clients
 for (let i = 0; i < CLIENT_COUNT; i++) {
     const c = new NetClient(SERVER_URL, "demoGame");
     clients.push(c);
-}
 
-// Attach logs to each client
-clients.forEach((c, index) => {
-    c.on("connected", () => console.log(`C${index} connected`));
-    c.on("assignedId", id => console.log(`C${index} assignedId`, id));
-    c.on("roomCreated", (roomId, pid) => console.log(`C${index} roomCreated`, roomId));
-    c.on("roomJoined", (roomId, pid, ownerId, max) => console.log(`C${index} roomJoined`, roomId));
-    c.on("relay", (from, payload) => console.log(`C${index} relay from ${from}`, payload));
-    c.on("tellOwner", (from, payload) => console.log(`C${index} tellOwner from ${from}`, payload));
-    c.on("tellPlayer", (from, payload) => console.log(`C${index} tellPlayer from ${from}`, payload));
-    c.on("makeHost", oldHost => console.log(`C${index} makeHost`, oldHost));
-    c.on("reassignedHost", (newHost, oldHost) => console.log(`C${index} reassignedHost`, newHost));
-    c.on("playerLeft", pid => console.log(`C${index} playerLeft`, pid));
-    c.on("roomList", list => console.log(`C${index} roomList`, list));
-    c.on("binary", data => console.log(`C${index} binary`, data));
-});
+    const t0 = performance.now();
+
+    c.on("connected", () => {
+        timings.connect.push(performance.now() - t0);
+    });
+
+    c.on("assignedId", () => {
+        assignedCount++;
+        timings.assignedId.push(performance.now() - t0);
+    });
+
+    c.on("roomJoined", () => {
+        joinCount++;
+        timings.joinRoom.push(performance.now() - t0);
+    });
+
+    c.on("relay", () => {
+        relayReceived++;
+        timings.relay.push(performance.now() - t0);
+    });
+
+    c.on("binary", () => {
+        binaryReceived++;
+        timings.binary.push(performance.now() - t0);
+    });
+}
 
 // Connect all clients
 clients.forEach(c => c.connect());
 
+function stats(name, arr) {
+    if (arr.length === 0) return;
+    const min = Math.min(...arr).toFixed(2);
+    const max = Math.max(...arr).toFixed(2);
+    const avg = (arr.reduce((a, b) => a + b, 0) / arr.length).toFixed(2);
+    console.log(`${name}: min=${min}ms max=${max}ms avg=${avg}ms samples=${arr.length}`);
+}
+
 (async () => {
-    await wait(1000);
+    console.log("Waiting for all clients to get assignedId...");
+    while (assignedCount < CLIENT_COUNT) {
+        await wait(50);
+    }
 
-    console.log("=== STEP 1: Client 0 creates a room ===");
-    clients[0].createRoom([], 8, false);
+    console.log("=== STEP 1: Client 0 creates room ===");
+    clients[0].createRoom([], 200);
 
-    await wait(500);
+    while (!clients[0].roomId) {
+        await wait(20);
+    }
 
     const roomId = clients[0].roomId;
-    console.log("Room created:", roomId);
 
-    console.log("=== STEP 2: Other clients join the room ===");
+    console.log("=== STEP 2: All clients join ===");
     for (let i = 1; i < CLIENT_COUNT; i++) {
         clients[i].joinRoom(roomId);
-        await wait(300);
+        await wait(5);
     }
 
-    console.log("=== STEP 3: Relay messages from all clients ===");
+    while (joinCount < CLIENT_COUNT - 1) {
+        await wait(20);
+    }
+
+    console.log("=== STEP 3: Relay burst ===");
     for (let i = 0; i < CLIENT_COUNT; i++) {
-        clients[i].sendRelay({ msg: `Hello from client ${i}` });
-        await wait(200);
+        clients[i].sendRelay({ msg: `Hello from ${i}` });
     }
 
-    console.log("=== STEP 4: tellOwner from clients 1–3 ===");
-    for (let i = 1; i < CLIENT_COUNT; i++) {
-        clients[i].tellOwner({ msg: `Owner pls respond ${i}` });
-        await wait(200);
-    }
+    await wait(1000);
 
-    console.log("=== STEP 5: tellPlayer from owner to each client ===");
-    for (let i = 1; i < CLIENT_COUNT; i++) {
-        clients[0].tellPlayer(clients[i].playerId, { msg: `Hi C${i}` });
-        await wait(200);
-    }
-
-    console.log("=== STEP 6: List rooms ===");
-    clients[2].listRooms();
-
-    await wait(500);
-
-    console.log("=== STEP 7: Send binary packets ===");
+    console.log("=== STEP 4: Binary burst ===");
     const bin = [1, 2, 3, 4, 5];
-    clients[1].sendBinary(bin);
-    clients[2].sendBinary(bin);
-    clients[3].sendBinary(bin);
+    for (let i = 0; i < CLIENT_COUNT; i++) {
+        clients[i].sendBinary(bin);
+    }
 
-    await wait(500);
+    await wait(1000);
 
-    console.log("=== STEP 8: Clients leave the room ===");
-    for (let i = CLIENT_COUNT - 1; i >= 0; i--) {
+    console.log("=== STEP 5: Everyone leaves ===");
+    for (let i = 0; i < CLIENT_COUNT; i++) {
         clients[i].leaveRoom();
-        await wait(300);
+        await wait(5);
     }
 
     console.log("=== CHAOS TEST COMPLETE ===");
+
+    console.log("\n=== TIMING RESULTS ===");
+    stats("Connect", timings.connect);
+    stats("AssignedId", timings.assignedId);
+    stats("JoinRoom", timings.joinRoom);
+    stats("Relay", timings.relay);
+    stats("Binary", timings.binary);
 })();

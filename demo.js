@@ -1,125 +1,91 @@
 import NetClient from "./netClient.js";
 
-// CHANGE THIS to your Render WebSocket URL
-const SERVER_URL = "wss://gamebackend-dk2p.onrender.com";
-
-const net = new NetClient(SERVER_URL, "demoGame");
-
-// UI helpers
-const logBox = document.getElementById("log");
-function log(msg) {
-  logBox.innerHTML += msg + "<br>";
-  logBox.scrollTop = logBox.scrollHeight;
+// Utility
+function wait(ms) {
+    return new Promise(res => setTimeout(res, ms));
 }
 
-// Game state
-const players = {}; // playerId → { x, y, color }
-let myId = null;
+// Create N fake clients
+const CLIENT_COUNT = 4;
+const clients = [];
 
-// Canvas setup
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
-
-// Connect immediately
-net.connect();
-
-// ----------------------
-// EVENT HANDLERS
-// ----------------------
-
-net.on("connected", () => log("Connected to server"));
-net.on("disconnected", () => log("Disconnected"));
-
-net.on("assignedId", (id) => {
-  myId = id;
-  log("Assigned ID: " + id);
-});
-
-net.on("roomCreated", (roomId, yourId) => {
-  log("Room created: " + roomId);
-});
-
-net.on("roomJoined", (roomId, yourId, ownerId, maxClients) => {
-  log(`Joined room ${roomId} | Host: ${ownerId} | Max: ${maxClients}`);
-
-  // Spawn your square
-  players[myId] = {
-    x: Math.random() * 500,
-    y: Math.random() * 300,
-    color: "#" + Math.floor(Math.random() * 16777215).toString(16)
-  };
-});
-
-net.on("playerLeft", (playerId) => {
-  log("Player left: " + playerId);
-  delete players[playerId];
-});
-
-net.on("makeHost", (oldHostId) => {
-  log("You are now the host (old host: " + oldHostId + ")");
-});
-
-net.on("reassignedHost", (newHostId, oldHostId) => {
-  log(`Host changed: ${oldHostId} → ${newHostId}`);
-});
-
-net.on("relay", (fromId, payload) => {
-  if (!players[fromId]) {
-    players[fromId] = {
-      x: 0, y: 0,
-      color: "#" + Math.floor(Math.random() * 16777215).toString(16)
-    };
-  }
-  players[fromId].x = payload.x;
-  players[fromId].y = payload.y;
-});
-
-// ----------------------
-// INPUT HANDLING
-// ----------------------
-
-document.addEventListener("keydown", (e) => {
-  if (!players[myId]) return;
-
-  const me = players[myId];
-
-  if (e.key === "ArrowUp") me.y -= 5;
-  if (e.key === "ArrowDown") me.y += 5;
-  if (e.key === "ArrowLeft") me.x -= 5;
-  if (e.key === "ArrowRight") me.x += 5;
-
-  // Broadcast movement
-  net.sendRelay({ x: me.x, y: me.y });
-});
-
-// ----------------------
-// RENDER LOOP
-// ----------------------
-
-function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-  for (const id in players) {
-    const p = players[id];
-    ctx.fillStyle = p.color;
-    ctx.fillRect(p.x, p.y, 20, 20);
-  }
-
-  requestAnimationFrame(draw);
+for (let i = 0; i < CLIENT_COUNT; i++) {
+    const c = new NetClient("wss://yourserver.onrender.com", "demoGame");
+    clients.push(c);
 }
-draw();
 
-// ----------------------
-// BUTTONS
-// ----------------------
+// Attach logs to each client
+clients.forEach((c, index) => {
+    c.on("assignId", data => console.log(`C${index} assignedId`, data));
+    c.on("roomCreated", data => console.log(`C${index} roomCreated`, data));
+    c.on("roomJoined", data => console.log(`C${index} roomJoined`, data));
+    c.on("relay", data => console.log(`C${index} relay`, data));
+    c.on("makeHost", data => console.log(`C${index} makeHost`, data));
+    c.on("reassignedHost", data => console.log(`C${index} reassignedHost`, data));
+    c.on("playerLeft", data => console.log(`C${index} playerLeft`, data));
+    c.on("roomList", data => console.log(`C${index} roomList`, data));
+});
 
-document.getElementById("createBtn").onclick = () => {
-  net.createRoom([], 8, false);
-  console.log("readyState:", net.ws.readyState);
-};
+// Connect all clients
+clients.forEach(c => c.connect());
 
-document.getElementById("joinBtn").onclick = () => {
-  console.log("readyState:", net.ws.readyState);
-  const roomId = document.getElementById("roomInput").value.trim();
-  if (roomId) net.joinRoom(roomId);
-};
+(async () => {
+    // Wait for all connections to establish
+    await wait(1000);
+
+    console.log("=== STEP 1: Client 0 creates a room ===");
+    clients[0].createRoom({
+        tags: ["game:demoGame"],
+        maxClients: 8
+    });
+
+    await wait(500);
+
+    const roomId = clients[0].roomId;
+    console.log("Room created:", roomId);
+
+    console.log("=== STEP 2: Other clients join the room ===");
+    for (let i = 1; i < CLIENT_COUNT; i++) {
+        clients[i].joinRoom(roomId);
+        await wait(300);
+    }
+
+    console.log("=== STEP 3: Relay messages from all clients ===");
+    for (let i = 0; i < CLIENT_COUNT; i++) {
+        clients[i].relay({ msg: `Hello from client ${i}` });
+        await wait(200);
+    }
+
+    console.log("=== STEP 4: tellOwner from clients 1–3 ===");
+    for (let i = 1; i < CLIENT_COUNT; i++) {
+        clients[i].tellOwner({ msg: `Owner pls respond ${i}` });
+        await wait(200);
+    }
+
+    console.log("=== STEP 5: tellPlayer from owner to each client ===");
+    for (let i = 1; i < CLIENT_COUNT; i++) {
+        clients[0].tellPlayer(clients[i].playerId, { msg: `Hi C${i}` });
+        await wait(200);
+    }
+
+    console.log("=== STEP 6: List rooms ===");
+    clients[2].listRooms();
+
+    await wait(500);
+
+    console.log("=== STEP 7: Send binary packets ===");
+    const bin = new Uint8Array([1, 2, 3, 4, 5]);
+    clients[1].sendBinary(bin);
+    clients[2].sendBinary(bin);
+    clients[3].sendBinary(bin);
+
+    await wait(500);
+
+    console.log("=== STEP 8: Clients leave the room ===");
+    for (let i = CLIENT_COUNT - 1; i >= 0; i--) {
+        clients[i].leaveRoom();
+        await wait(300);
+    }
+
+    console.log("=== CHAOS TEST COMPLETE ===");
+})();

@@ -20,32 +20,9 @@ export default class NetClient {
     }
 
     // ------------------------------------------------------------------------
-    // === PUBLIC EVENT API ===
+    // Event API
     // ------------------------------------------------------------------------
 
-    /**
-     * Subscribe to a networking event.
-     *
-     * @param {string} event
-     * @param {Function} callback
-     *
-     * Events:
-     * "connected"
-     * "disconnected"
-     * "assignedId"        (yourId)
-     * "roomCreated"       (roomId, yourId)
-     * "roomJoined"        (roomId, yourId, ownerId, maxClients)
-     * "leftRoom"          (roomId)
-     * "makeHost"          (oldHostId)
-     * "reassignedHost"    (newHostId, oldHostId)
-     * "playerLeft"        (playerId)
-     * "relay"             (fromId, payload)
-     * "tellOwner"         (fromId, payload)
-     * "tellPlayer"        (fromId, payload)
-     * "roomList"          (rooms)
-     * "binary"            (fromId, ArrayBuffer)
-     * "error"             (message)
-     */
     on(event, callback) {
         if (!this.listeners[event]) this.listeners[event] = [];
         this.listeners[event].push(callback);
@@ -56,7 +33,7 @@ export default class NetClient {
     }
 
     // ------------------------------------------------------------------------
-    // === CONNECTION API ===
+    // Connection API
     // ------------------------------------------------------------------------
 
     connect() {
@@ -66,7 +43,6 @@ export default class NetClient {
         this.ws.onopen = () => this.emit("connected");
 
         this.ws.onclose = () => {
-            // reset all local state
             this.playerId = null;
             this.roomId = null;
             this.ownerId = null;
@@ -84,14 +60,19 @@ export default class NetClient {
     }
 
     // ------------------------------------------------------------------------
-    // === ROOM API ===
+    // Room API
     // ------------------------------------------------------------------------
 
-    createRoom(tags = [], maxClients = 8, isPrivate = false) {
+    createRoom(tags = [], maxClients = 8, isPrivate = false, metaData = {}) {
         this._send({
             type: "createRoom",
-            tags: [...tags, `game:${this.gameName}`, ...(isPrivate ? ["private"] : [])],
-            maxClients
+            tags: [
+                ...tags,
+                `game:${this.gameName}`,
+                ...(isPrivate ? ["private"] : [])
+            ],
+            maxClients,
+            metaData
         });
     }
 
@@ -111,7 +92,32 @@ export default class NetClient {
     }
 
     // ------------------------------------------------------------------------
-    // === MESSAGE API ===
+    // Host-only Room Settings API
+    // ------------------------------------------------------------------------
+
+    updateMeta(metaData) {
+        this._send({
+            type: "updateMeta",
+            metaData
+        });
+    }
+
+    addTag(tag) {
+        this._send({
+            type: "setRoomTag",
+            tag
+        });
+    }
+
+    removeTag(tag) {
+        this._send({
+            type: "clearRoomTag",
+            tag
+        });
+    }
+
+    // ------------------------------------------------------------------------
+    // Messaging API
     // ------------------------------------------------------------------------
 
     sendRelay(payload) {
@@ -126,19 +132,13 @@ export default class NetClient {
         this._send({ type: "tellPlayer", playerId, payload });
     }
 
-    /**
-     * Send raw binary data to all players in the room.
-     * Server will prefix senderId automatically.
-     *
-     * @param {ArrayBuffer} buffer
-     */
     sendBinary(buffer) {
         if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
         this.ws.send(buffer);
     }
 
     // ------------------------------------------------------------------------
-    // === INTERNAL MESSAGE HANDLING ===
+    // Internal message handling
     // ------------------------------------------------------------------------
 
     _handleMessage(evt) {
@@ -146,8 +146,6 @@ export default class NetClient {
         if (evt.data instanceof ArrayBuffer) {
             const dv = new DataView(evt.data);
             const fromId = dv.getUint32(0);
-
-            // slice off senderId (first 4 bytes)
             const payload = evt.data.slice(4);
             this.emit("binary", fromId, payload);
             return;
@@ -162,6 +160,7 @@ export default class NetClient {
         }
 
         switch (data.type) {
+
             case "assignId":
                 this.playerId = data.playerId;
                 this.emit("assignedId", data.playerId);
@@ -171,14 +170,25 @@ export default class NetClient {
                 this.roomId = data.roomId;
                 this.ownerId = data.playerId;
                 this.isHost = true;
-                this.emit("roomCreated", data.roomId, data.playerId);
+                this.emit("roomCreated", data.roomId, data.playerId, data.metaData);
                 break;
 
             case "roomJoined":
                 this.roomId = data.roomId;
                 this.ownerId = data.ownerId;
                 this.isHost = false;
-                this.emit("roomJoined", data.roomId, data.playerId, data.ownerId, data.maxClients);
+                this.emit(
+                    "roomJoined",
+                    data.roomId,
+                    data.playerId,
+                    data.ownerId,
+                    data.maxClients,
+                    data.metaData
+                );
+                break;
+
+            case "playerJoined":
+                this.emit("playerJoined", data.playerId);
                 break;
 
             case "leftRoom":
@@ -218,6 +228,18 @@ export default class NetClient {
 
             case "roomList":
                 this.emit("roomList", data.rooms);
+                break;
+
+            case "roomUpdated":
+                this.emit("roomUpdated", data.metaData);
+                break;
+
+            case "roomTagAdded":
+                this.emit("roomTagAdded", data.tag, data.tags);
+                break;
+
+            case "roomTagRemoved":
+                this.emit("roomTagRemoved", data.tag, data.tags);
                 break;
 
             case "error":

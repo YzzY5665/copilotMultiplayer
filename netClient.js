@@ -1,6 +1,7 @@
 // ============================================================================
 // NetClient.js
 // Networking class for browser games
+// currently online at wss://gamebackend-dk2p.onrender.com
 // ============================================================================
 
 export default class NetClient {

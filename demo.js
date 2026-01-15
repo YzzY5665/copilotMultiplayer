@@ -1,61 +1,17 @@
+// ============================================================================
+// demo.js
+// Chaos / load test for NetClient + WebSocket game server
+// ============================================================================
+
 import NetClient from "./netClient.js";
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
 
 function wait(ms) {
     return new Promise(res => setTimeout(res, ms));
 }
-
-const SERVER_URL = "wss://gamebackend-dk2p.onrender.com";
-const CLIENT_COUNT = 100;
-const clients = [];
-
-let assignedCount = 0;
-let joinCount = 0;
-let relayReceived = 0;
-let binaryReceived = 0;
-
-// Timing buckets
-const timings = {
-    connect: [],
-    assignedId: [],
-    joinRoom: [],
-    relay: [],
-    binary: []
-};
-
-// Create clients
-for (let i = 0; i < CLIENT_COUNT; i++) {
-    const c = new NetClient(SERVER_URL, "demoGame");
-    clients.push(c);
-
-    const t0 = performance.now();
-
-    c.on("connected", () => {
-        timings.connect.push(performance.now() - t0);
-    });
-
-    c.on("assignedId", () => {
-        assignedCount++;
-        timings.assignedId.push(performance.now() - t0);
-    });
-
-    c.on("roomJoined", () => {
-        joinCount++;
-        timings.joinRoom.push(performance.now() - t0);
-    });
-
-    c.on("relay", () => {
-        relayReceived++;
-        timings.relay.push(performance.now() - t0);
-    });
-
-    c.on("binary", () => {
-        binaryReceived++;
-        timings.binary.push(performance.now() - t0);
-    });
-}
-
-// Connect all clients
-clients.forEach(c => c.connect());
 
 function stats(name, arr) {
     if (arr.length === 0) return;
@@ -65,8 +21,81 @@ function stats(name, arr) {
     console.log(`${name}: min=${min}ms max=${max}ms avg=${avg}ms samples=${arr.length}`);
 }
 
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+const SERVER_URL = "wss://gamebackend-dk2p.onrender.com";
+const CLIENT_COUNT = 100;
+const clients = [];
+
+// counters
+let assignedCount = 0;
+let joinCount = 0;
+let relayReceived = 0;
+let binaryReceived = 0;
+
+// timing buckets
+const timings = {
+    connect: [],
+    assignedId: [],
+    joinRoom: [],
+    relay: [],
+    binary: []
+};
+
+// ---------------------------------------------------------------------------
+// Create clients
+// ---------------------------------------------------------------------------
+
+for (let i = 0; i < CLIENT_COUNT; i++) {
+    const client = new NetClient(SERVER_URL, "demoGame");
+    clients.push(client);
+
+    const t0 = performance.now();
+
+    client.on("connected", () => {
+        timings.connect.push(performance.now() - t0);
+    });
+
+    client.on("assignedId", () => {
+        assignedCount++;
+        timings.assignedId.push(performance.now() - t0);
+    });
+
+    client.on("roomJoined", () => {
+        joinCount++;
+        timings.joinRoom.push(performance.now() - t0);
+    });
+
+    client.on("relay", () => {
+        relayReceived++;
+        timings.relay.push(performance.now() - t0);
+    });
+
+    client.on("binary", () => {
+        binaryReceived++;
+        timings.binary.push(performance.now() - t0);
+    });
+
+    client.on("error", msg => {
+        console.warn(`[Client ${i}] ERROR:`, msg);
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Connect all clients
+// ---------------------------------------------------------------------------
+
+clients.forEach(c => c.connect());
+
+// ---------------------------------------------------------------------------
+// Test sequence
+// ---------------------------------------------------------------------------
+
 (async () => {
-    console.log("Waiting for all clients to get assignedId...");
+    console.log("Waiting for all clients to receive assignedId...");
+
     while (assignedCount < CLIENT_COUNT) {
         await wait(50);
     }
@@ -79,11 +108,12 @@ function stats(name, arr) {
     }
 
     const roomId = clients[0].roomId;
+    console.log("Room ID:", roomId);
 
     console.log("=== STEP 2: All clients join ===");
     for (let i = 1; i < CLIENT_COUNT; i++) {
         clients[i].joinRoom(roomId);
-        await wait(5);
+        await wait(5); // stagger joins slightly
     }
 
     while (joinCount < CLIENT_COUNT - 1) {
@@ -98,7 +128,10 @@ function stats(name, arr) {
     await wait(1000);
 
     console.log("=== STEP 4: Binary burst ===");
-    const bin = [1, 2, 3, 4, 5];
+
+    // small fixed binary payload (5 bytes)
+    const bin = new Uint8Array([1, 2, 3, 4, 5]).buffer;
+
     for (let i = 0; i < CLIENT_COUNT; i++) {
         clients[i].sendBinary(bin);
     }
@@ -111,6 +144,8 @@ function stats(name, arr) {
         await wait(5);
     }
 
+    await wait(500);
+
     console.log("=== CHAOS TEST COMPLETE ===");
 
     console.log("\n=== TIMING RESULTS ===");
@@ -119,4 +154,10 @@ function stats(name, arr) {
     stats("JoinRoom", timings.joinRoom);
     stats("Relay", timings.relay);
     stats("Binary", timings.binary);
+
+    console.log("\n=== COUNTS ===");
+    console.log("assigned:", assignedCount);
+    console.log("joined:", joinCount);
+    console.log("relay received:", relayReceived);
+    console.log("binary received:", binaryReceived);
 })();

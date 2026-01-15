@@ -10,7 +10,7 @@ const CLIENT_COUNT = 4;
 const clients = [];
 
 for (let i = 0; i < CLIENT_COUNT; i++) {
-    const c = new NetClient("wss://yourserver.onrender.com", "demoGame");
+    const c = new NetClient("wss://gamebackend-dk2p.onrender.com", "demoGame");
     clients.push(c);
 }
 

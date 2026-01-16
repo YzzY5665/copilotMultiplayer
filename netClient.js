@@ -1,6 +1,7 @@
 // ============================================================================
 // NetClient.js
 // Lightweight WebSocket networking client for browser games
+// online at "wss://gamebackend-dk2p.onrender.com"
 // ============================================================================
 
 export default class NetClient {

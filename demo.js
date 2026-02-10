@@ -37,7 +37,11 @@ net.on("assignedId", (id) => {
 
 net.on("roomCreated", (roomId, yourId) => {
     log("Room created: " + roomId);
-    
+    players[myId] = {
+        x: Math.random() * 500,
+        y: Math.random() * 300,
+        color: "#" + Math.floor(Math.random()*16777215).toString(16)
+    };
 });
 
 net.on("roomJoined", (roomId, yourId, ownerId, maxClients) => {
@@ -65,6 +69,7 @@ net.on("reassignedHost", (newHostId, oldHostId) => {
 });
 
 net.on("relay", (fromId, payload) => {
+
     if (!players[fromId]) {
         players[fromId] = {
             x: 0, y: 0,

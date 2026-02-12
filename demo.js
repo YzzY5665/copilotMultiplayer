@@ -82,8 +82,9 @@ net.on("relay", (fromId, payload) => {
             color: payload.color || "#" + Math.floor(Math.random()*16777215).toString(16)
         };
     }
-    players[fromId].x = payload.x;
-    players[fromId].y = payload.y;
+    if (payload.color) players[fromId].color = payload.color;
+    if (payload.x) players[fromId].x = payload.x;
+    if (payload.y) players[fromId].y = payload.y;
 });
 
 net.on("playerJoined", (playerId) => {
@@ -139,3 +140,11 @@ document.getElementById("joinBtn").onclick = () => {
     const roomId = document.getElementById("roomInput").value.trim();
     if (roomId) net.joinRoom(roomId);
 };
+
+document.getElementById("colorBtn").onclick = () => {
+    if (!players[myId]) return;
+
+    const me = players[myId];
+    me.color = "#" + Math.floor(Math.random()*16777215).toString(16);
+    net.sendRelay({ color: me.color });
+}

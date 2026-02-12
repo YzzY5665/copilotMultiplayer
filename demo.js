@@ -53,8 +53,8 @@ net.on("roomJoined", (roomId, yourId, ownerId, maxClients) => {
 
     // Spawn your square
     players[myId] = {
-        x: Math.random() * 500,
-        y: Math.random() * 300,
+        x: Math.floor(Math.random() * 100) * 5,
+        y: Math.floor(Math.random() * 60) * 5,
         color: "#" + Math.floor(Math.random()*16777215).toString(16)
     };
     
@@ -96,19 +96,12 @@ net.on("playerJoined", (playerId) => {
 // ----------------------
 // INPUT HANDLING
 // ----------------------
-
-document.addEventListener("keydown", (e) => {
-    if (!players[myId]) return;
-
-    const me = players[myId];
-
-    if (e.key === "ArrowUp") me.y -= 5;
-    if (e.key === "ArrowDown") me.y += 5;
-    if (e.key === "ArrowLeft") me.x -= 5;
-    if (e.key === "ArrowRight") me.x += 5;
-
-    // Broadcast movement
-    net.sendRelay({ x: me.x, y: me.y });
+var keysDown = {};
+document.addEventListener("keydown", function (e) {
+    keysDown[e.key] = true;
+});
+document.addEventListener("keyup", function (e) {
+    delete keysDown[e.key];
 });
 
 // ----------------------
@@ -117,7 +110,20 @@ document.addEventListener("keydown", (e) => {
 
 function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (players[myId]){
 
+        const me = players[myId];
+
+        if (keysDown["ArrowUp"]) me.y -= 3;
+        if (keysDown["ArrowDown"]) me.y += 3;
+        if (keysDown["ArrowLeft"]) me.x -= 3;
+        if (keysDown["ArrowRight"]) me.x += 3;
+        me.y = Math.max(0, Math.min(canvas.height - 20, me.y));
+        me.x = Math.max(0, Math.min(canvas.width - 20, me.x));
+        // Broadcast movement
+        
+        net.sendRelay({ x: me.x, y: me.y });
+    }
     for (const id in players) {
         const p = players[id];
         ctx.fillStyle = p.color;

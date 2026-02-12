@@ -114,10 +114,10 @@ function draw() {
 
         const me = players[myId];
 
-        if (keysDown["ArrowUp"]) me.y -= 3;
-        if (keysDown["ArrowDown"]) me.y += 3;
-        if (keysDown["ArrowLeft"]) me.x -= 3;
-        if (keysDown["ArrowRight"]) me.x += 3;
+        if (keysDown["ArrowUp"] || keysDown["w"]) me.y -= 3;
+        if (keysDown["ArrowDown"] || keysDown["s"]) me.y += 3;
+        if (keysDown["ArrowLeft"] || keysDown["a"]) me.x -= 3;
+        if (keysDown["ArrowRight"] || keysDown["d"]) me.x += 3;
         me.y = Math.max(0, Math.min(canvas.height - 20, me.y));
         me.x = Math.max(0, Math.min(canvas.width - 20, me.x));
         // Broadcast movement

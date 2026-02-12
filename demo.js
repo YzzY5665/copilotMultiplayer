@@ -7,8 +7,12 @@ const net = new NetClient(SERVER_URL, "demoGame");
 
 // UI helpers
 const logBox = document.getElementById("log");
-function log(msg) {
-    logBox.innerHTML += msg + "<br>";
+function log(msg, replace = false) {
+    if (replace) {
+        logBox.innerHTML = msg + "<br>";
+    } else {
+        logBox.innerHTML += msg + "<br>";
+    }
     logBox.scrollTop = logBox.scrollHeight;
 }
 
@@ -22,12 +26,12 @@ const ctx = canvas.getContext("2d");
 
 // Connect immediately
 net.connect();
-
+log("Connecting to server...");
 // ----------------------
 // EVENT HANDLERS
 // ----------------------
 
-net.on("connected", () => log("Connected to server"));
+net.on("connected", () => log("Connected to server", true));
 net.on("disconnected", () => log("Disconnected"));
 
 net.on("assignedId", (id) => {

@@ -53,6 +53,8 @@ net.on("roomJoined", (roomId, yourId, ownerId, maxClients) => {
         y: Math.random() * 300,
         color: "#" + Math.floor(Math.random()*16777215).toString(16)
     };
+    
+    net.sendRelay({ x: players[myId].x, y: players[myId].y, color : players[myId].color });
 });
 
 net.on("playerLeft", (playerId) => {
@@ -73,11 +75,17 @@ net.on("relay", (fromId, payload) => {
     if (!players[fromId]) {
         players[fromId] = {
             x: 0, y: 0,
-            color: "#" + Math.floor(Math.random()*16777215).toString(16)
+            color: payload.color || "#" + Math.floor(Math.random()*16777215).toString(16)
         };
     }
     players[fromId].x = payload.x;
     players[fromId].y = payload.y;
+});
+
+net.on("playerJoined", (playerId) => {
+    console.log("Player joined: " + playerId);
+    const me = players[myId];
+    net.sendRelay({ x: me.x, y: me.y, color: me.color });
 });
 
 // ----------------------
